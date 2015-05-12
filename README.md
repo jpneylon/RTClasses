@@ -10,6 +10,7 @@ RTSTRUCT: contoured structure information
 
 RTPLAN: external beam radiotherapy plan information
 
+
 Utilizes the dcmtk-snapshot: http://dicom.offis.de/download/dcmtk/snapshot/
 
 The latest official release does not contain the dcmrt library
