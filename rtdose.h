@@ -6,7 +6,10 @@
 #include "dcmtk/dcmrt/drmdose.h"
 
 #define RTDOSE_SOP_CLASS_UID "1.2.840.10008.5.1.4.1.1.481.2"
+
+#ifndef UINT16_MAX
 #define UINT16_MAX 65535
+#endif
 
 class RTDose
 {

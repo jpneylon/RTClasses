@@ -62,7 +62,7 @@ RTImage::loadDicomInfo()
     {
         if ( strcmp(dp->d_name, ".") == 0 || strcmp(dp->d_name, "..") == 0 )
             continue;
-        else if( strstr(dp->d_name,".dcm") != NULL )
+        else //if( strstr(dp->d_name,".dcm") != NULL )
         {
             if ( importSOPClassUID(dp->d_name) )
                 image_count++;
@@ -82,7 +82,7 @@ RTImage::loadDicomInfo()
         {
             if ( strcmp(dp->d_name, ".") == 0 || strcmp(dp->d_name, "..") == 0 )
                 continue;
-            else if (strstr(dp->d_name,".dcm")!=NULL)
+            else //if (strstr(dp->d_name,".dcm")!=NULL)
             {
                 if ( importSOPClassUID(dp->d_name) )
                 {

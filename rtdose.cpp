@@ -43,7 +43,7 @@ RTDose::loadDicomInfo()
     {
         if ( strcmp(dp->d_name, ".") == 0 || strcmp(dp->d_name, "..") == 0 )
             continue;
-        else if( strstr(dp->d_name,".dcm") != NULL )
+        else //if( strstr(dp->d_name,".dcm") != NULL )
         {
             rtdose_file_found = importSOPClassUID(dp->d_name);
             if ( rtdose_file_found )
@@ -197,9 +197,10 @@ RTDose::loadRTDoseData()
         voxel_size.y = v;
 
         dcmrt_dose.getGridFrameOffsetVector(v,1);
-        voxel_size.z = v;
+        float frame0 = v;
         dcmrt_dose.getGridFrameOffsetVector(v,0);
-        voxel_size.z -= v;
+        float frame1 = v;
+        voxel_size.z = fabs(frame1 - frame0);
 
         dcmrt_dose.getImagePositionPatient(v,0);
         data_origin.x = v;

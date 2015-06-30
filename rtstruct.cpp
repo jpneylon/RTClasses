@@ -72,7 +72,7 @@ RTStruct::loadDicomInfo()
     {
         if ( strcmp(dp->d_name, ".") == 0 || strcmp(dp->d_name, "..") == 0 )
             continue;
-        else if( strstr(dp->d_name,".dcm") != NULL )
+        else //if( strstr(dp->d_name,".dcm") != NULL )
         {
             rtstruct_file_found = importSOPClassUID(dp->d_name);
             if ( rtstruct_file_found )
@@ -211,30 +211,63 @@ RTStruct::loadRTStructInfo()
 
         DRTROIContourSequence roiContourSequence = dcmrt_struct.getROIContourSequence();
 
-        for (uint s=0; s < roi_count; s++)
+        for (uint r=0; r < roi_count; r++)
         {
-            DRTStructureSetROISequence::Item roi_seq_item = ROIsequence.getItem(s);
+            DRTStructureSetROISequence::Item roi_seq_item = ROIsequence.getItem(r);
 
             Sint32 roiNUMBER;
             roi_seq_item.getROINumber( roiNUMBER, 0);
-            roi_array[s].roi_number = roiNUMBER;
-            roi_array[s].load_data = false;
+            roi_array[r].roi_number = roiNUMBER;
+            roi_array[r].load_data = false;
 
             OFString roiNAME;
             roi_seq_item.getROIName( roiNAME, 0 );
-            roi_array[s].roi_name = roiNAME.data();
-            printf("\n %d. %s:", roi_array[s].roi_number, roi_array[s].roi_name.data() );
+            roi_array[r].roi_name = roiNAME.data();
+            printf("\n %d. %s:", roi_array[r].roi_number, roi_array[r].roi_name.data() );
 
-            DRTROIContourSequence::Item roiContourSequenceItem = roiContourSequence.getItem(s);
+            DRTROIContourSequence::Item roiContourSequenceItem = roiContourSequence.getItem(r);
 
             Sint32 roiCOLOR;
             roiContourSequenceItem.getROIDisplayColor( roiCOLOR, 0);
-            roi_array[s].roi_rgb_color.x = roiCOLOR;
+            roi_array[r].roi_rgb_color.x = roiCOLOR;
             roiContourSequenceItem.getROIDisplayColor( roiCOLOR, 1);
-            roi_array[s].roi_rgb_color.y = roiCOLOR;
+            roi_array[r].roi_rgb_color.y = roiCOLOR;
             roiContourSequenceItem.getROIDisplayColor( roiCOLOR, 2);
-            roi_array[s].roi_rgb_color.z = roiCOLOR;
-            printf(" (%d,%d,%d) ", roi_array[s].roi_rgb_color.x, roi_array[s].roi_rgb_color.y, roi_array[s].roi_rgb_color.z);
+            roi_array[r].roi_rgb_color.z = roiCOLOR;
+            printf(" (%d,%d,%d) ", roi_array[r].roi_rgb_color.x, roi_array[r].roi_rgb_color.y, roi_array[r].roi_rgb_color.z);
+
+            DRTContourSequence contourSequence = roiContourSequenceItem.getContourSequence();
+
+            if ( contourSequence.isValid() )
+            {
+                roi_array[r].sub_cntr_count = contourSequence.getNumberOfItems();
+
+                if (roi_array[r].sub_cntr_count > 0)
+                {
+                    roi_array[r].total_points_count = 0;
+                    roi_array[r].sub_cntr_points_count = new uint[ roi_array[r].sub_cntr_count ];
+
+                    for (uint sc = 0; sc < roi_array[r].sub_cntr_count; sc++)
+                    {
+                        DRTContourSequence::Item contourSequenceItem = contourSequence.getItem(sc);
+
+                        Sint32 contourPointsCount;
+                        contourSequenceItem.getNumberOfContourPoints( contourPointsCount, 0 );
+
+                        roi_array[r].sub_cntr_points_count[sc] = contourPointsCount;
+                        roi_array[r].total_points_count += contourPointsCount;
+                    }
+                    printf(" %d data points...", roi_array[r].total_points_count);
+                }
+                else
+                {
+                    printf(" aborting.\n");
+                }
+            }
+            else
+            {
+                printf(" failed to load ROI sequence. Aborting.\n");
+            }
         }
     }
     printf("\n\n");
@@ -287,12 +320,9 @@ RTStruct::loadRTStructData( int r )
 
         if ( contourSequence.isValid() )
         {
-            roi_array[roi].sub_cntr_count = contourSequence.getNumberOfItems();
             printf("%d sub-cntrs,",roi_array[roi].sub_cntr_count);
             if (roi_array[roi].sub_cntr_count > 0)
             {
-                roi_array[roi].total_points_count = 0;
-                roi_array[roi].sub_cntr_points_count = new uint[ roi_array[roi].sub_cntr_count ];
                 roi_array[roi].sub_cntr_data = new CNTR_DATA[ roi_array[roi].sub_cntr_count ];
 
                 for (uint sc = 0; sc < roi_array[roi].sub_cntr_count; sc++)
@@ -301,8 +331,6 @@ RTStruct::loadRTStructData( int r )
 
                     Sint32 contourPointsCount;
                     contourSequenceItem.getNumberOfContourPoints( contourPointsCount, 0 );
-
-                    roi_array[roi].sub_cntr_points_count[sc] = contourPointsCount;
                     roi_array[roi].sub_cntr_data[sc].points = new float[ 3 * contourPointsCount ];
 
                     OFVector<double> cntrData;
@@ -310,8 +338,6 @@ RTStruct::loadRTStructData( int r )
                     if (status.good())
                         for (uint scpc = 0; scpc < roi_array[roi].sub_cntr_points_count[sc]; scpc++)
                             setSubCntrPoint( roi, sc, scpc, cntrData[3*scpc], cntrData[3*scpc+1], cntrData[3*scpc+2] );
-
-                    roi_array[roi].total_points_count += contourPointsCount;
                 }
                 printf(" %d data points...", roi_array[roi].total_points_count);
             }
@@ -339,7 +365,7 @@ RTStruct::copyROI( int r, ROI_DATA *roi_copy, int c )
 {
     roi_copy[c].roi_number = c;
     roi_copy[c].roi_name = roi_array[r].roi_name.data();
-
+    roi_copy[c].load_data = true;
     roi_copy[c].roi_rgb_color.x = roi_array[r].roi_rgb_color.x;
     roi_copy[c].roi_rgb_color.y = roi_array[r].roi_rgb_color.y;
     roi_copy[c].roi_rgb_color.z = roi_array[r].roi_rgb_color.z;
