@@ -20,3 +20,7 @@ Depends on DCMTK Library:
 DCMTK website: http://dicom.offis.de/dcmtk.php.en
 
 `apt-get install dcmtk`
+
+
+// created by: Jack Neylon, PhD
+// 2021-02-22

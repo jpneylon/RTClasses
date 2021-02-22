@@ -1,4 +1,6 @@
 // EXAMPLE USAGE TO LOAD RT DICOM DATA
+// created by: Jack Neylon, PhD
+// 2021-02-22
 
 #include <string.h>
 #include <strings.h>
