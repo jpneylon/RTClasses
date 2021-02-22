@@ -8,10 +8,15 @@ Install with CMAKE
  - installs headers and libary into system diretories
 
 Clone repository ->
+
 `cd build/`
+
 `cmake ..`
+
 `make`
 
 Depends on DCMTK Library:
+
 DCMTK website: http://dicom.offis.de/dcmtk.php.en
+
 `apt-get install dcmtk`
