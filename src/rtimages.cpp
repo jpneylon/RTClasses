@@ -1,24 +1,20 @@
 #include "rtimages.h"
 
-RTImage::RTImage() {}
+RTImage::RTImage()
+{
+    image_count = 0;
+}
 RTImage::~RTImage()
 {
-    _finalize();
-}
-void
-RTImage::_finalize()
-{
-    if (data_array)
-        delete []data_array;
-
     if (image_count > 0)
     {
-        delete []slice;
+        delete [] slice;
+        delete [] data_array;
     }
 }
 
 void
-RTImage::setDicomDirectory( char *buffer )
+RTImage::setDicomDirectory( const char *buffer )
 {
     dicom_dir.clear();
     dicom_dir = buffer;
@@ -70,7 +66,7 @@ RTImage::loadDicomInfo()
     }
     closedir(dfd);
 
-    printf("\n %d RT Images Found.\n",image_count);
+    printf("\n %d RT Images Found. Type: %d\n",image_count,sop_type);
     if (image_count > 0)
     {
         rtimageset_file_found = true;
@@ -103,34 +99,69 @@ RTImage::loadDicomInfo()
             keep_sorting = false;
             for( uint j=1; j<sortCount; j++)
             {
-                if ( slice[j-1].instance_number > slice[j].instance_number )
+                /*if (sop_type == SOP_CT)
                 {
-                    keep_sorting = true;
-                    int tempint = slice[j].instance_number;
-                    slice[j].instance_number = slice[j-1].instance_number;
-                    slice[j-1].instance_number = tempint;
+                    if ( slice[j-1].instance_number > slice[j].instance_number )
+                    {
+                        keep_sorting = true;
+                        int tempint = slice[j].instance_number;
+                        slice[j].instance_number = slice[j-1].instance_number;
+                        slice[j-1].instance_number = tempint;
 
-                    char *tempchar_j, *tempchar_j1;
+                        char *tempchar_j, *tempchar_j1;
 
-                    tempchar_j = new char[ strlen(slice[j].filename.data()) + 1 ];
-                    tempchar_j1 = new char[ strlen(slice[j-1].filename.data()) + 1 ];
+                        tempchar_j = new char[ strlen(slice[j].filename.data()) + 1 ];
+                        tempchar_j1 = new char[ strlen(slice[j-1].filename.data()) + 1 ];
 
-                    sprintf( tempchar_j, "%s", slice[j].filename.data() );
-                    sprintf( tempchar_j1, "%s", slice[j-1].filename.data() );
+                        sprintf( tempchar_j, "%s", slice[j].filename.data() );
+                        sprintf( tempchar_j1, "%s", slice[j-1].filename.data() );
 
-                    slice[j].filename.clear();
-                    slice[j].filename = tempchar_j1;
+                        slice[j].filename.clear();
+                        slice[j].filename = tempchar_j1;
 
-                    slice[j-1].filename.clear();
-                    slice[j-1].filename = tempchar_j;
+                        slice[j-1].filename.clear();
+                        slice[j-1].filename = tempchar_j;
 
-                    delete []tempchar_j;
-                    delete []tempchar_j1;
+                        delete []tempchar_j;
+                        delete []tempchar_j1;
+                    }
                 }
+                else if (sop_type == SOP_MR)
+                {*/
+                    if ( slice[j-1].slice_location < slice[j].slice_location )
+                    {
+                        keep_sorting = true;
+                        float tempfloat = slice[j].slice_location;
+                        slice[j].slice_location = slice[j-1].slice_location;
+                        slice[j-1].slice_location = tempfloat;
+
+                        char *tempchar_j, *tempchar_j1;
+
+                        tempchar_j = new char[ strlen(slice[j].filename.data()) + 1 ];
+                        tempchar_j1 = new char[ strlen(slice[j-1].filename.data()) + 1 ];
+
+                        sprintf( tempchar_j, "%s", slice[j].filename.data() );
+                        sprintf( tempchar_j1, "%s", slice[j-1].filename.data() );
+
+                        slice[j].filename.clear();
+                        slice[j].filename = tempchar_j1;
+
+                        slice[j-1].filename.clear();
+                        slice[j-1].filename = tempchar_j;
+
+                        delete []tempchar_j;
+                        delete []tempchar_j1;
+                    }
+                //}
             }
             sortCount--;
         }
         while (keep_sorting && sortCount > 1);
+
+        for( uint j=0; j<image_count; j++)
+        {
+                slice[j].instance_number = j;
+        }
 
         importPatientInfo();
 
@@ -160,11 +191,25 @@ RTImage::importSOPClassUID( char *buffer )
     bool series_is_rtimage = false;
     OFString ptSOPCLASSUID;
     if (format.getDataset()->findAndGetOFString(DCM_SOPClassUID, ptSOPCLASSUID).good())
-        if(0 == ptSOPCLASSUID.compare(RTIMAGE_SOP_CLASS_UID) ||
-                0 == ptSOPCLASSUID.compare(CTIMAGE_SOP_CLASS_UID)  )
+    {
+        if(0 == ptSOPCLASSUID.compare(RTIMAGE_SOP_CLASS_UID))
         {
             series_is_rtimage = true;
+            sop_type = SOP_RTIMAGE;
         }
+        else if (0 == ptSOPCLASSUID.compare(CTIMAGE_SOP_CLASS_UID))
+        {
+            series_is_rtimage = true;
+            sop_type = SOP_CT;
+        }
+        else if (0 == ptSOPCLASSUID.compare(MRIMAGE_SOP_CLASS_UID))
+        {
+            series_is_rtimage = true;
+            sop_type = SOP_MR;
+        }
+        //else
+        //    printf("\n %s ",ptSOPCLASSUID.data());
+    }
 
     delete []filename;
     return series_is_rtimage;
@@ -177,11 +222,24 @@ RTImage::importInstanceNumber( uint i )
     OFCondition status = format.loadFile( slice[i].filename.data() );
     if (status.good())
     {
-        Sint32 instanceNUMBER;
-        if (format.getDataset()->findAndGetSint32(DCM_InstanceNumber, instanceNUMBER).good())
+        /*if (sop_type == SOP_CT)
         {
-            slice[i].instance_number = instanceNUMBER;
+            Sint32 instanceNUMBER;
+            if (format.getDataset()->findAndGetSint32(DCM_InstanceNumber, instanceNUMBER).good())
+            {
+                slice[i].instance_number = instanceNUMBER;
+            }
         }
+        else if (sop_type == SOP_MR)
+        {*/
+            //Float64 sliceLOCATION;
+            Float64 imagePOSITION;
+            if (format.getDataset()->findAndGetFloat64(DCM_ImagePositionPatient, imagePOSITION, 2).good())
+                slice[i].slice_location = imagePOSITION;
+            /*if (format.getDataset()->findAndGetFloat64(DCM_SliceLocation, sliceLOCATION, 0).good())
+                slice[i].slice_location = sliceLOCATION;
+            */
+        //}
     }
     else
         printf("\n Error reading DICOM file:\n\t%s\n", slice[i].filename.data() );
@@ -290,26 +348,50 @@ RTImage::loadRTImageData()
                 if (format.getDataset()->findAndGetFloat64(DCM_ImagePositionPatient, imagePOSITION, 2).good())
                     data_origin.z = imagePOSITION;
 
-                Float64 rescaleINTERCEPT;
-                if (format.getDataset()->findAndGetFloat64(DCM_RescaleIntercept, rescaleINTERCEPT).good())
-                    rescale_intercept = rescaleINTERCEPT;
-
-                Float64 rescaleSLOPE;
-                if (format.getDataset()->findAndGetFloat64(DCM_RescaleSlope, rescaleSLOPE).good())
-                    rescale_slope = rescaleSLOPE;
-
-                Float64 windowCENTER;
-                if (format.getDataset()->findAndGetFloat64(DCM_WindowCenter, windowCENTER).good())
-                    window_center = windowCENTER;
-
-                Float64 windowWIDTH;
-                if (format.getDataset()->findAndGetFloat64(DCM_WindowWidth, windowWIDTH).good())
-                    window_width = windowWIDTH;
+                Float64 imageORIENT;
+                if (format.getDataset()->findAndGetFloat64(DCM_ImageOrientationPatient, imageORIENT, 0).good())
+                    orient_x.x = imageORIENT;
+                if (format.getDataset()->findAndGetFloat64(DCM_ImageOrientationPatient, imageORIENT, 1).good())
+                    orient_x.y = imageORIENT;
+                if (format.getDataset()->findAndGetFloat64(DCM_ImageOrientationPatient, imageORIENT, 2).good())
+                    orient_x.z = imageORIENT;
+                if (format.getDataset()->findAndGetFloat64(DCM_ImageOrientationPatient, imageORIENT, 3).good())
+                    orient_y.x = imageORIENT;
+                if (format.getDataset()->findAndGetFloat64(DCM_ImageOrientationPatient, imageORIENT, 4).good())
+                    orient_y.y = imageORIENT;
+                if (format.getDataset()->findAndGetFloat64(DCM_ImageOrientationPatient, imageORIENT, 5).good())
+                    orient_y.z = imageORIENT;
 
                 printf("\n Data Dimensions: %d x %d x %d \n Voxel Dimensions: %2.3f x %2.3f x %2.3f",data_size.x,data_size.y,data_size.z,voxel_size.x,voxel_size.y,voxel_size.z);
                 printf("\n DATA Position: %2.3f x %2.3f x %2.3f ",data_origin.x,data_origin.y,data_origin.z);
-                printf("\n Window Center: %3.3f\n Window Width: %3.3f",window_center,window_width);
-                printf("\n Rescale Slope: %2.2f\n Rescale Intercept: %3.3f",rescale_slope,rescale_intercept);
+                printf("\n DATA Orientation X: %2.3f x %2.3f x %2.3f ",orient_x.x,orient_x.y,orient_x.z);
+                printf("\n DATA Orientation Y: %2.3f x %2.3f x %2.3f ",orient_y.x,orient_y.y,orient_y.z);
+
+                if (sop_type == SOP_CT)
+                {
+                    Float64 rescaleINTERCEPT;
+                    if (format.getDataset()->findAndGetFloat64(DCM_RescaleIntercept, rescaleINTERCEPT).good())
+                        rescale_intercept = rescaleINTERCEPT;
+
+                    Float64 rescaleSLOPE;
+                    if (format.getDataset()->findAndGetFloat64(DCM_RescaleSlope, rescaleSLOPE).good())
+                        rescale_slope = rescaleSLOPE;
+
+                    Float64 windowCENTER;
+                    if (format.getDataset()->findAndGetFloat64(DCM_WindowCenter, windowCENTER).good())
+                        window_center = windowCENTER;
+
+                    Float64 windowWIDTH;
+                    if (format.getDataset()->findAndGetFloat64(DCM_WindowWidth, windowWIDTH).good())
+                        window_width = windowWIDTH;
+
+                    printf("\n Window Center: %3.3f\n Window Width: %3.3f",window_center,window_width);
+                    printf("\n Rescale Slope: %2.2f\n Rescale Intercept: %3.3f\n",rescale_slope,rescale_intercept);
+                }
+                else if (sop_type == SOP_MR)
+                {
+                    // derp
+                }
 
                 data_array = new float[ data_size.x * data_size.y * data_size.z ];
                 memset( data_array, 0, data_size.x * data_size.y * data_size.z * sizeof(float) );
@@ -345,9 +427,16 @@ RTImage::loadRTImageData()
                     {
                         int p = x + data_size.x * y;
                         float value = (float)pixelData[p];
-                        value *= rescale_slope;
-                        value += rescale_intercept;
-                        setArrayVoxel( x, y, i, value );
+                        if (sop_type == SOP_CT)
+                        {
+                            value *= rescale_slope;
+                            value += rescale_intercept;
+                            setArrayVoxel( x, y, i, value );
+                        }
+                        else if (sop_type == SOP_MR)
+                        {
+                            setArrayVoxel( x, y, i, value );
+                        }
                         if (value > data_max) data_max = value;
                         if (value < data_min) data_min = value;
                     }
@@ -367,7 +456,7 @@ RTImage::loadRTImageData()
 int
 RTImage::saveRTImageData( const char *outpath, float *newData, bool anonymize_switch )
 {
-    for (uint i=0; i<image_count; i++)
+    for (int i=0; i<data_size.z; i++)
     {
         DcmFileFormat format;
         OFCondition status = format.loadFile( slice[i].filename.data() );
@@ -387,11 +476,14 @@ RTImage::saveRTImageData( const char *outpath, float *newData, bool anonymize_sw
             dataset->putAndInsertString(DCM_AcquisitionDate,buffer).good();
             dataset->putAndInsertString(DCM_SeriesDate,buffer).good();
 
-            Uint16 width,height;
+            Uint16 width,height,images;
             width = data_size.x;
             height = data_size.y;
+            images = data_size.z;
             dataset->putAndInsertUint16(DCM_Columns,width).good();
             dataset->putAndInsertUint16(DCM_Rows,height).good();
+            dataset->putAndInsertUint16(DCM_ImagesInAcquisition,images).good();
+            //printf("\n Output Data Dimensions: %d x %d x %d", width, height, images );
 
             Float64 vz;
             vz = voxel_size.z;
@@ -402,6 +494,12 @@ RTImage::saveRTImageData( const char *outpath, float *newData, bool anonymize_sw
             sprintf(pixelSpacing,"%3.3f\\%3.3f",voxel_size.x,voxel_size.y);
             vxy.assign( (const char*)pixelSpacing );
             dataset->putAndInsertOFStringArray(DCM_PixelSpacing,vxy,OFTrue).good();
+
+            OFString vxyz;
+            char dataOrigin[32];
+            sprintf(dataOrigin,"%3.3f\\%3.3f\\%3.3f",data_origin.x,data_origin.y,data_origin.z);
+            vxyz.assign( (const char*)dataOrigin );
+            dataset->putAndInsertOFStringArray(DCM_ImagePositionPatient,vxyz,OFTrue).good();
 
             Sint32 instanceNUMBER;
             instanceNUMBER = slice[i].instance_number;
@@ -424,7 +522,11 @@ RTImage::saveRTImageData( const char *outpath, float *newData, bool anonymize_sw
                 {
                     int p = x + data_size.x*y;
                     Uint16 temp;
-                    temp = (Uint16)((getArrayVoxel(x,y,i) - rescale_intercept) / rescale_slope );
+                    //temp = (Uint16)((getArrayVoxel(x,y,i) - rescale_intercept) / rescale_slope );
+                    if (sop_type == SOP_CT)
+                        temp = (Uint16)((newData[p + i*data_size.x*data_size.y] - rescale_intercept) / rescale_slope );
+                    else if (sop_type == SOP_MR)
+                        temp = (Uint16)newData[p + i*data_size.x*data_size.y];
                     pixelDataOut[p] = temp;
                 }
 
@@ -447,6 +549,44 @@ RTImage::saveRTImageData( const char *outpath, float *newData, bool anonymize_sw
             printf("\n Error: cannot read Image object (%s)\n", status.text() );
     }
     return 1;
+}
+
+void
+RTImage::saveRTImageData( const char *outpath, bool anonymize_switch )
+{
+    for (uint i=0; i<image_count; i++)
+    {
+        DcmFileFormat format;
+        OFCondition status = format.loadFile( slice[i].filename.c_str() );
+        if (status.good())
+        {
+            DcmDataset *dataset = format.getDataset();
+
+            if (anonymize_switch)
+                anonymize( dataset );
+
+            time_t rawtime;
+            struct tm *timeinfo;
+            char buffer[32];
+            time (&rawtime);
+            timeinfo = localtime (&rawtime);
+            strftime(buffer,32,"%G%m%d",timeinfo);
+            //format.getDataset()->putAndInsertString(DCM_AcquisitionDate,buffer).good();
+            format.getDataset()->putAndInsertString(DCM_SeriesDate,buffer).good();
+            fflush(stdout);
+
+            mkdir((const char *)outpath,S_IRWXU|S_IRWXG|S_IRWXO);
+
+            char *outfilename = new char[ strlen(outpath) + 32 ];
+            sprintf(outfilename,"%s/New_DICOM_Image_Data_%d.dcm",outpath,i+1);
+            status = format.saveFile( outfilename );
+            if (status.bad())
+                printf("Error: cannot write DICOM file ( %s )", status.text() );
+        }
+        else
+            printf("\n Error: cannot read Image object (%s)\n", status.text() );
+    }
+    return;
 }
 
 
@@ -473,7 +613,7 @@ RTImage::anonymize( DcmDataset *dataset )
     dataset->findAndDeleteElement(DCM_PatientInsurancePlanCodeSequence, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_PatientPrimaryLanguageCodeSequence, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_PatientPrimaryLanguageModifierCodeSequence, OFTrue, OFTrue);
-    dataset->findAndDeleteElement(DCM_OtherPatientIDs, OFTrue, OFTrue);
+//    dataset->findAndDeleteElement(DCM_OtherPatientIDs, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_OtherPatientNames, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_OtherPatientIDsSequence, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_PatientBirthName, OFTrue, OFTrue);
@@ -485,7 +625,7 @@ RTImage::anonymize( DcmDataset *dataset )
     dataset->findAndDeleteElement(DCM_PatientMotherBirthName, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_MilitaryRank, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_BranchOfService, OFTrue, OFTrue);
-    dataset->findAndDeleteElement(DCM_MedicalRecordLocator, OFTrue, OFTrue);
+//    dataset->findAndDeleteElement(DCM_MedicalRecordLocator, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_MedicalAlerts, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_Allergies, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_CountryOfResidence, OFTrue, OFTrue);

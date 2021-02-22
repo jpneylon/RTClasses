@@ -1,19 +1,22 @@
 #include "rtdose.h"
 
-RTDose::RTDose() {}
+RTDose::RTDose()
+{
+    data_loaded = false;
+    rtdose_file_found = false;
+}
 RTDose::~RTDose()
 {
-    _finalize();
-}
-void
-RTDose::_finalize()
-{
-    //if (data_array)
-    //    delete []data_array;
+    /*if (rtdose_file_found)
+        if (data_loaded)
+        {
+            printf("\n Delete Dose Array \n");
+            delete [] data_array;
+        }*/
 }
 
 void
-RTDose::setDicomDirectory( char *buffer )
+RTDose::setDicomDirectory( const char *buffer )
 {
     dicom_dir.clear();
     dicom_dir = buffer;
@@ -38,20 +41,20 @@ RTDose::loadDicomInfo()
         return 0;
     }
 
-    bool rtdose_file_found = false;
     while ((dp = readdir(dfd)) != NULL && !rtdose_file_found)
     {
         if ( strcmp(dp->d_name, ".") == 0 || strcmp(dp->d_name, "..") == 0 )
             continue;
-        else //if( strstr(dp->d_name,".dcm") != NULL )
+        else //if (strstr(dp->d_name,".dcm")!=NULL)
         {
             rtdose_file_found = importSOPClassUID(dp->d_name);
             if ( rtdose_file_found )
             {
+                printf(" RTDOSE file found. -> %s\n", dicom_full_filename.data());
+                fflush(stdout);
                 dicom_full_filename = dicom_dir.data();
                 dicom_full_filename += "/";
                 dicom_full_filename += dp->d_name;
-                printf(" RTDOSE file found. -> %s\n", dicom_full_filename.data());
             }
         }
     }
@@ -92,7 +95,7 @@ RTDose::importSOPClassUID( char *buffer )
             series_is_rtdose = true;
         }
 
-    delete []filename;
+    delete [] filename;
     return series_is_rtdose;
 }
 
@@ -172,6 +175,18 @@ RTDose::importPatientInfo()
         reference_frame_uid = ptREFFRAMEUID.data();
         //printf("\n REFERENCE FRAME UID: %s",pt_series_instance_uid.data());
     }
+    OFString ptREFSOPCLASSUID;
+    if (dataset->findAndGetOFString(DCM_ReferencedSOPClassUID, ptREFSOPCLASSUID).good())
+    {
+        reference_sop_class_uid = ptREFSOPCLASSUID.data();
+        //printf("\n REFERENCE FRAME UID: %s",pt_series_instance_uid.data());
+    }
+    OFString ptREFSOPINSTANCEUID;
+    if (dataset->findAndGetOFString(DCM_ReferencedSOPInstanceUID, ptREFSOPINSTANCEUID).good())
+    {
+        reference_sop_instance_uid = ptREFSOPINSTANCEUID.data();
+        //printf("\n REFERENCE FRAME UID: %s",pt_series_instance_uid.data());
+    }
     printf("\n");
 }
 
@@ -239,32 +254,38 @@ RTDose::loadRTDoseData()
         printf("\n Data Dimensions: %d x %d x %d \n Voxel Dimensions: %2.3f x %2.3f x %2.3f",data_size.x,data_size.y,data_size.z,voxel_size.x,voxel_size.y,voxel_size.z);
         printf("\n DATA Position: %2.3f x %2.3f x %2.3f ",data_origin.x,data_origin.y,data_origin.z);
 
-        data_array = new float[width*height*numberOfFrames];
-
-        float min = 0, max = 0;
-        OFVector< OFVector<double> > doseImage;
-        status = dcmrt_dose.getDoseImages( doseImage );
-        if (status.good())
+        int size = width * height * numberOfFrames;
+        if (size > 0)
         {
-            for (int z=0; z<numberOfFrames; z++)
-                for (int y = 0; y < dcmrt_dose.getDoseImageHeight(); ++y)
-                {
-                    for (int x = 0; x < dcmrt_dose.getDoseImageWidth(); ++x)
-                    {
-                        int p = x + dcmrt_dose.getDoseImageWidth() * y;
-                        float value = doseImage.at(z).at(p);
-                        setArrayVoxel( x, y, z, value );
-                        if (value > max) max = value;
-                    }
-                }
-        }
-        else
-            printf("\n Error: cannot access Dose Image (%s)\n", status.text() );
+            data_array = new float[size];
 
-        data_min = min;
-        data_max = max;
-        printf("\n Data Min: %4.3f\n Data Max: %4.3f\n\n",data_min,data_max);
-        fflush(stdout);
+            float min = 0, max = 0;
+            OFVector< OFVector<double> > doseImage;
+            status = dcmrt_dose.getDoseImages( doseImage );
+            printf("\n DoseImage Width x Height: %d x %d \n", dcmrt_dose.getDoseImageWidth(), dcmrt_dose.getDoseImageHeight() );
+
+            if (status.good())
+            {
+                for (int z=0; z<numberOfFrames; z++)
+                    for (int y = 0; y < dcmrt_dose.getDoseImageHeight(); ++y)
+                    {
+                        for (int x = 0; x < dcmrt_dose.getDoseImageWidth(); ++x)
+                        {
+                            int p = x + dcmrt_dose.getDoseImageWidth() * y;
+                            float value = doseImage.at(z).at(p);
+                            setArrayVoxel( x, y, z, value );
+                            if (value > max) max = value;
+                        }
+                    }
+            }
+            else
+                printf("\n Error: cannot access Dose Image (%s)\n", status.text() );
+
+            data_min = min;
+            data_max = max;
+            printf("\n Data Min: %4.3f\n Data Max: %4.3f\n\n",data_min,data_max);
+            data_loaded = true;
+        }
     }
     else
         printf("\n Error: cannot read RT Dose object (%s)\n", status.text() );
@@ -414,6 +435,60 @@ RTDose::saveRTDoseData( const char *outpath, float *newData, bool anonymize_swit
     return 1;
 }
 
+void
+RTDose::saveRTDoseData( const char *outpath, bool anonymize_switch )
+{
+    DcmFileFormat format;
+    OFCondition status = format.loadFile( dicom_full_filename.data() );
+    if (status.bad())
+    {
+        printf("\n Error reading DICOM file:\n\t%s\n", dicom_full_filename.data() );
+        return;
+    }
+
+    if (anonymize_switch)
+        anonymize( format.getDataset() );
+
+    time_t rawtime;
+    struct tm * timeinfo;
+    char buffer[64];
+    time (&rawtime);
+    timeinfo = localtime (&rawtime);
+    strftime (buffer,32,"%G%m%d",timeinfo);
+    //format.getDataset()->putAndInsertString(DCM_AcquisitionDate,buffer).good();
+    format.getDataset()->putAndInsertString(DCM_SeriesDate,buffer).good();
+    printf("  Creation date written...\n");
+    fflush(stdout);
+
+    printf("\n %s",outpath);
+    if (0 == mkdir((const char *)outpath,S_IRWXU|S_IRWXG|S_IRWXO) )
+    {
+        printf("\n ...directory created successfully.");
+        fflush(stdout);
+    }
+    else
+    {
+        printf("\n Directory already exists.\n");
+        fflush(stdout);
+    }
+
+    DRTDoseIOD rtdose_template;
+    status = rtdose_template.read(*format.getDataset());
+
+    DRTDoseIOD rtdose_new(rtdose_template);
+
+    format.clear();
+    status = rtdose_new.write(*format.getDataset());
+    if (status.good())
+    {
+        char outfilename[512];
+        sprintf(outfilename,"%s/RD.new_dose.dcm",outpath);
+        status = format.saveFile( outfilename );
+        if (status.bad())
+            printf("Error: cannot write DICOM file ( %s )",status.text() );
+    }
+}
+
 
 
 /*
@@ -443,7 +518,7 @@ RTDose::anonymize( DcmDataset *dataset )
     dataset->findAndDeleteElement(DCM_PatientInsurancePlanCodeSequence, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_PatientPrimaryLanguageCodeSequence, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_PatientPrimaryLanguageModifierCodeSequence, OFTrue, OFTrue);
-    dataset->findAndDeleteElement(DCM_OtherPatientIDs, OFTrue, OFTrue);
+//    dataset->findAndDeleteElement(DCM_OtherPatientIDs, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_OtherPatientNames, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_OtherPatientIDsSequence, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_PatientBirthName, OFTrue, OFTrue);
@@ -455,7 +530,7 @@ RTDose::anonymize( DcmDataset *dataset )
     dataset->findAndDeleteElement(DCM_PatientMotherBirthName, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_MilitaryRank, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_BranchOfService, OFTrue, OFTrue);
-    dataset->findAndDeleteElement(DCM_MedicalRecordLocator, OFTrue, OFTrue);
+//    dataset->findAndDeleteElement(DCM_MedicalRecordLocator, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_MedicalAlerts, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_Allergies, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_CountryOfResidence, OFTrue, OFTrue);

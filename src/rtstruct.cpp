@@ -1,32 +1,34 @@
 #include "rtstruct.h"
 
-RTStruct::RTStruct() {}
+RTStruct::RTStruct()
+{
+    roi_count = 0;
+    rtstruct_file_found = false;
+}
 RTStruct::~RTStruct()
 {
-    _finalize();
-}
-void
-RTStruct::_finalize()
-{
-    if (roi_array)
+    if (rtstruct_file_found)
     {
-        for (uint r=0; r < roi_count; r++ )
+        if (roi_count > 0)
         {
-            if ( roi_array[r].load_data && roi_array[r].sub_cntr_count > 0)
+            for (uint r=0; r < roi_count; r++ )
             {
-                for (uint s=0; s < roi_array[r].sub_cntr_count; s++)
-                    delete []roi_array[r].sub_cntr_data[s].points;
-                delete []roi_array[r].sub_cntr_data;
-                delete []roi_array[r].sub_cntr_points_count;
+                if ( roi_array[r].load_data && roi_array[r].sub_cntr_count > 0)
+                {
+                    for (uint s=0; s < roi_array[r].sub_cntr_count; s++)
+                        delete []roi_array[r].sub_cntr_data[s].points;
+                    delete []roi_array[r].sub_cntr_data;
+                    delete []roi_array[r].sub_cntr_points_count;
+                }
             }
+            delete []roi_array;
         }
-        delete []roi_array;
     }
 }
 
 
 void
-RTStruct::setDicomDirectory( char *buffer )
+RTStruct::setDicomDirectory( const char *buffer )
 {
     dicom_dir.clear();
     dicom_dir = buffer;
@@ -41,14 +43,45 @@ RTStruct::setDicomFilename( char *buffer )
 void
 RTStruct::setSubCntrPoint( uint r, uint s, uint p, float v_x, float v_y, float v_z )
 {
+    if (p == 0 && s == 0)
+    {
+        roi_array[r].range_min.x = v_x;
+        roi_array[r].range_min.y = v_y;
+        roi_array[r].range_min.z = v_z;
+
+        roi_array[r].range_max.x = v_x;
+        roi_array[r].range_max.y = v_y;
+        roi_array[r].range_max.z = v_z;
+    }
+    else
+    {
+        if (v_x < roi_array[r].range_min.x)
+            roi_array[r].range_min.x = v_x;
+
+        if (v_y < roi_array[r].range_min.y)
+            roi_array[r].range_min.y = v_y;
+
+        if (v_z < roi_array[r].range_min.z)
+            roi_array[r].range_min.z = v_z;
+
+        if (v_x > roi_array[r].range_max.x)
+            roi_array[r].range_max.x = v_x;
+
+        if (v_y > roi_array[r].range_max.y)
+            roi_array[r].range_max.y = v_y;
+
+        if (v_z > roi_array[r].range_max.z)
+            roi_array[r].range_max.z = v_z;
+    }
+
     roi_array[r].sub_cntr_data[s].points[3*p] = v_x;
     roi_array[r].sub_cntr_data[s].points[3*p+1] = v_y;
     roi_array[r].sub_cntr_data[s].points[3*p+2] = v_z;
 }
-float3
+rtfloat3
 RTStruct::getSubCntrPoint( uint r, uint s, uint p )
 {
-    float3 point;
+    rtfloat3 point;
     point.x = roi_array[r].sub_cntr_data[s].points[3*p];
     point.y = roi_array[r].sub_cntr_data[s].points[3*p+1];
     point.z = roi_array[r].sub_cntr_data[s].points[3*p+2];
@@ -67,12 +100,11 @@ RTStruct::loadDicomInfo()
         return 0;
     }
 
-    bool rtstruct_file_found = false;
     while ((dp = readdir(dfd)) != NULL  && !rtstruct_file_found)
     {
         if ( strcmp(dp->d_name, ".") == 0 || strcmp(dp->d_name, "..") == 0 )
             continue;
-        else //if( strstr(dp->d_name,".dcm") != NULL )
+        else //if (strstr(dp->d_name,".dcm")!=NULL)
         {
             rtstruct_file_found = importSOPClassUID(dp->d_name);
             if ( rtstruct_file_found )
@@ -340,6 +372,12 @@ RTStruct::loadRTStructData( int r )
                             setSubCntrPoint( roi, sc, scpc, cntrData[3*scpc], cntrData[3*scpc+1], cntrData[3*scpc+2] );
                 }
                 printf(" %d data points...", roi_array[roi].total_points_count);
+                printf(" range [ %f, %f ], [ %f, %f ], [ %f, %f ] ...", roi_array[roi].range_min.x,
+                                                                        roi_array[roi].range_max.x,
+                                                                        roi_array[roi].range_min.y,
+                                                                        roi_array[roi].range_max.y,
+                                                                        roi_array[roi].range_min.z,
+                                                                        roi_array[roi].range_max.z);
             }
             else
             {
@@ -512,6 +550,60 @@ RTStruct::saveRTStructData( const char *outpath, ROI_DATA *new_roi_data, uint ne
 
 
 void
+RTStruct::saveRTStructData( const char *outpath, bool anonymize_switch )
+{
+    DcmFileFormat format;
+    OFCondition status = format.loadFile( dicom_full_filename.data() );
+    if (status.bad())
+    {
+        printf("\n Error reading DICOM file:\n\t%s\n", dicom_full_filename.data() );
+    }
+
+    if (anonymize_switch)
+        anonymize( format.getDataset() );
+
+    time_t rawtime;
+    struct tm * timeinfo;
+    char buffer[64];
+    time (&rawtime);
+    timeinfo = localtime (&rawtime);
+    strftime (buffer,32,"%G%m%d",timeinfo);
+    //format.getDataset()->putAndInsertString(DCM_AcquisitionDate,buffer).good();
+    format.getDataset()->putAndInsertString(DCM_SeriesDate,buffer).good();
+    printf("  Creation date written...\n");
+    fflush(stdout);
+
+    printf("\n %s",outpath);
+    if (0 == mkdir((const char *)outpath,S_IRWXU|S_IRWXG|S_IRWXO) )
+    {
+        printf("\n ...directory created successfully.");
+        fflush(stdout);
+    }
+    else
+    {
+        printf("\n Directory already exists.\n");
+        fflush(stdout);
+    }
+
+    DRTStructureSetIOD rtstruct_template;
+    status = rtstruct_template.read(*format.getDataset());
+
+    DRTStructureSetIOD rtstruct_new(rtstruct_template);
+
+    format.clear();
+    status = rtstruct_new.write(*format.getDataset());
+    if (status.good())
+    {
+        char outfilename[512];
+        sprintf(outfilename,"%s/RS.new_structure_set.dcm",outpath);
+        status = format.saveFile( outfilename );
+        if (status.bad())
+            printf("Error: cannot write DICOM file ( %s )",status.text() );
+    }
+}
+
+
+void
 RTStruct::anonymize( DcmDataset *dataset )
 {
     dataset->findAndDeleteElement(DCM_AccessionNumber, OFTrue, OFTrue);
@@ -534,7 +626,7 @@ RTStruct::anonymize( DcmDataset *dataset )
     dataset->findAndDeleteElement(DCM_PatientInsurancePlanCodeSequence, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_PatientPrimaryLanguageCodeSequence, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_PatientPrimaryLanguageModifierCodeSequence, OFTrue, OFTrue);
-    dataset->findAndDeleteElement(DCM_OtherPatientIDs, OFTrue, OFTrue);
+//    dataset->findAndDeleteElement(DCM_OtherPatientIDs, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_OtherPatientNames, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_OtherPatientIDsSequence, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_PatientBirthName, OFTrue, OFTrue);
@@ -546,7 +638,7 @@ RTStruct::anonymize( DcmDataset *dataset )
     dataset->findAndDeleteElement(DCM_PatientMotherBirthName, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_MilitaryRank, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_BranchOfService, OFTrue, OFTrue);
-    dataset->findAndDeleteElement(DCM_MedicalRecordLocator, OFTrue, OFTrue);
+//    dataset->findAndDeleteElement(DCM_MedicalRecordLocator, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_MedicalAlerts, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_Allergies, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_CountryOfResidence, OFTrue, OFTrue);
@@ -560,21 +652,3 @@ RTStruct::anonymize( DcmDataset *dataset )
     dataset->findAndDeleteElement(DCM_LastMenstrualDate, OFTrue, OFTrue);
     dataset->findAndDeleteElement(DCM_PatientReligiousPreference, OFTrue, OFTrue);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

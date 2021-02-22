@@ -11,6 +11,8 @@
 #define UINT16_MAX 65535
 #endif
 
+using namespace RTC;
+
 class RTDose
 {
 public:
@@ -20,6 +22,7 @@ public:
     bool loadDicomInfo();
     int  loadRTDoseData();
     int  saveRTDoseData ( const char *outpath, float *newData, bool anonymize_switch );
+    void saveRTDoseData ( const char *outpath, bool anonymize_switch );
     bool importSOPClassUID( char *buffer );
     void importPatientInfo();
     void anonymize( DcmDataset *dataset );
@@ -39,21 +42,21 @@ public:
     };
 
     void   setDicomFilename( char *buffer );
-    void   setDicomDirectory( char *buffer );
+    void   setDicomDirectory( const char *buffer );
 
     float  getArrayVoxel(int i, int j, int k)
     {
         return data_array[i + data_size.x*(j + data_size.y*k)];
     };
-    int3    getDataSize()
+    rtint3    getDataSize()
     {
         return data_size;
     };
-    float3  getVoxelSize()
+    rtfloat3  getVoxelSize()
     {
         return voxel_size;
     };
-    float3  getDataOrigin()
+    rtfloat3  getDataOrigin()
     {
         return data_origin;
     };
@@ -117,12 +120,16 @@ protected:
     std::string pt_series_instance_uid;
 
     std::string reference_frame_uid;
+    std::string reference_sop_class_uid;
+    std::string reference_sop_instance_uid;
 
-    int3 data_size;
-    float3 voxel_size;
-    float3 data_origin;
+    rtint3 data_size;
+    rtfloat3 voxel_size;
+    rtfloat3 data_origin;
     float data_min;
     float data_max;
+    bool  data_loaded;
+    bool rtdose_file_found;
 
     float data_scaler;
     float *data_array;

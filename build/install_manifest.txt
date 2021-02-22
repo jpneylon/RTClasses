@@ -1,0 +1,12 @@
+/usr/local/lib/librtclasses.a
+/usr/local/include/rtclasses/rtstruct.h
+/usr/local/include/rtclasses/rtdose.h
+/usr/local/include/rtclasses/rtplan.h
+/usr/local/include/rtclasses/rtclasses.h
+/usr/local/include/rtclasses/rtrigidreg.h
+/usr/local/include/rtclasses/rtdir.h
+/usr/local/include/rtclasses/rtcinemr.h
+/usr/local/include/rtclasses/rtimages.h
+/usr/local/include/rtclasses/dcmtk_includes.h
+/usr/local/share/rtclasses/cmake/rtclassesConfig.cmake
+/usr/local/share/rtclasses/cmake/rtclassesConfig-release.cmake

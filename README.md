@@ -17,3 +17,18 @@ The latest official release does not contain the dcmrt library
 
 DCMTK website: http://dicom.offis.de/dcmtk.php.en
 
+
+Information on library link orders:
+
+http://forum.dcmtk.org/viewtopic.php?t=36
+
+http://support.dcmtk.org/redmine/projects/dcmtk/wiki/modules
+
+
+config
+ofstd
+oflog
+dcmdata
+dcmimgle
+dcmrt
+

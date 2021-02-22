@@ -7,6 +7,8 @@
 
 #define RTPLAN_SOP_CLASS_UID "1.2.840.10008.5.1.4.1.1.481.5"
 
+using namespace RTC;
+
 class RTPlan
 {
 public:
@@ -39,7 +41,7 @@ public:
         float constraint_weight;
         std::string description;
         std::string type;
-        bool oar_target_switch; // 0 = oar, 1 = target
+        int oar_target_switch; // 0 = oar, 1 = target, -1 = none
         OAR_DATA *oar;
         TARGET_DATA *target;
     };
@@ -54,11 +56,11 @@ public:
 
     bool loadDicomInfo();
     void loadRTPlanData();
+    void saveRTPlanData( const char *outpath, bool anonymize_switch );
     bool importSOPClassUID( char *buffer );
     void importPatientInfo();
 
     void anonymize( DcmDataset *dataset );
-    void _finalize();
 
     char*  getDicomDirectory()
     {
@@ -69,11 +71,11 @@ public:
         return (char*)dicom_full_filename.data();
     };
 
-    float3  getIsocenter()
+    rtfloat3  getIsocenter()
     {
         return isocenter;
     };
-    float3  getRXDoseLevels()
+    rtfloat3  getRXDoseLevels()
     {
         return rx_dose_levels;
     };
@@ -83,7 +85,7 @@ public:
     };
 
     void   setDicomFilename( char *buffer );
-    void   setDicomDirectory( char *buffer );
+    void   setDicomDirectory( const char *buffer );
 
 protected:
     std::string dicom_dir;
@@ -99,15 +101,17 @@ protected:
     std::string pt_series_instance_uid;
 
     std::string rx_description;
-    float3 isocenter;
-    uint3 refd_rx_dose_ref_number;
-    float3 rx_dose_levels;
+    rtfloat3 isocenter;
+    rtuint3 refd_rx_dose_ref_number;
+    rtfloat3 rx_dose_levels;
     float ssd;
     uint fraction_count;
     uint beam_count;
     uint dose_ref_count;
     BEAM_DATA *beam_data;
     DOSE_REF_DATA *dose_ref_data;
+
+    bool rtplan_file_found;
 };
 
 #endif // __RTPLAN_H__

@@ -1,0 +1,12 @@
+prefix=/usr/local
+exec_prefix=/usr/local
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: rtclasses
+Description: DICOMRT I/O Wrappers for DCMTK (C++)
+Version: 1.0.1
+
+Requires:
+Libs: -L${libdir} -lrtclasses
+Cflags: -I${includedir}

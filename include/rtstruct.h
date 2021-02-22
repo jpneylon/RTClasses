@@ -7,6 +7,7 @@
 
 #define RTSTRUCT_SOP_CLASS_UID "1.2.840.10008.5.1.4.1.1.481.3"
 
+using namespace RTC;
 
 class RTStruct
 {
@@ -26,11 +27,13 @@ public:
       public:
         int roi_number;
         std::string roi_name;
-        int3 roi_rgb_color;
+        rtint3 roi_rgb_color;
         uint sub_cntr_count;
         bool load_data;
         uint *sub_cntr_points_count;
         uint total_points_count;
+        rtfloat3 range_min;
+        rtfloat3 range_max;
         CNTR_DATA *sub_cntr_data;
     };
 
@@ -40,12 +43,12 @@ public:
     void chooseContours();
     bool importSOPClassUID( char *buffer );
     void importPatientInfo();
-    void _finalize();
 
     void copyROI( int r, ROI_DATA *roi_copy, int c );
     void freeROI( ROI_DATA *roi_copy, int c );
     void anonymize( DcmDataset *dataset );
     void saveRTStructData ( const char *outpath, ROI_DATA *new_roi_data, uint new_roi_count, bool anonymize_switch );
+    void saveRTStructData ( const char *outpath, bool anonymize_switch );
 
     uint    getNumberOfROIs()
     {
@@ -60,7 +63,7 @@ public:
         return (char*)dicom_full_filename.data();
     };
 
-    float3 getSubCntrPoint( uint r, uint s, uint p );
+    rtfloat3 getSubCntrPoint( uint r, uint s, uint p );
     int    getROINumber( uint r )
     {
         return roi_array[r].roi_number;
@@ -69,7 +72,7 @@ public:
     {
         return (char*)roi_array[r].roi_name.data();
     };
-    int3    getROIColor( uint r )
+    rtint3    getROIColor( uint r )
     {
         return roi_array[r].roi_rgb_color;
     };
@@ -95,7 +98,7 @@ public:
     };
 
     void   setDicomFilename( char *buffer );
-    void   setDicomDirectory( char *buffer );
+    void   setDicomDirectory( const char *buffer );
     void   setSubCntrPoint( uint r, uint s, uint p, float v_x, float v_y, float v_z );
 
 protected:
@@ -110,6 +113,8 @@ protected:
     std::string pt_sop_instance_uid;
     std::string pt_study_instance_uid;
     std::string pt_series_instance_uid;
+
+    bool rtstruct_file_found;
 
     uint roi_count;
     ROI_DATA *roi_array;

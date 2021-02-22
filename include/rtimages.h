@@ -7,10 +7,13 @@
 
 #define RTIMAGE_SOP_CLASS_UID "1.2.840.10008.5.1.4.1.1.481.1"
 #define CTIMAGE_SOP_CLASS_UID "1.2.840.10008.5.1.4.1.1.2"
+#define MRIMAGE_SOP_CLASS_UID "1.2.840.10008.5.1.4.1.1.4"
 
 #ifndef UINT16_MAX
 #define UINT16_MAX 65535
 #endif
+
+using namespace RTC;
 
 class RTImage
 {
@@ -25,17 +28,18 @@ public:
         std::string sop_instance_uid;
         std::string reference_frame_uid;
         int instance_number;
-        float3 image_position_patient;
+        float slice_location;
+        rtfloat3 image_position_patient;
     };
 
     bool loadDicomInfo();
     int  loadRTImageData();
+    void saveRTImageData ( const char *outpath, bool anonymize_switch );
     int  saveRTImageData ( const char *outpath, float *newData, bool anonymize_switch );
     bool importSOPClassUID( char *buffer );
     void importInstanceNumber( uint i );
     void importPatientInfo();
     void anonymize( DcmDataset *dataset );
-    void _finalize();
 
     char*  getDicomDirectory()
     {
@@ -45,11 +49,15 @@ public:
     {
         return data_array[i + data_size.x*(j + data_size.y*k)];
     };
-    int3    getDataSize()
+    uint getImageCount()
+    {
+        return image_count;
+    };
+    rtint3    getDataSize()
     {
         return data_size;
     };
-    float3  getVoxelSize()
+    rtfloat3  getVoxelSize()
     {
         return voxel_size;
     };
@@ -85,7 +93,7 @@ public:
     {
         return slice[i].instance_number;
     };
-    float3  getSliceImagePositionPatient(uint i)
+    rtfloat3  getSliceImagePositionPatient(uint i)
     {
         return slice[i].image_position_patient;
     };
@@ -102,7 +110,7 @@ public:
         return (char*)slice[i].filename.data();
     };
 
-    void   setDicomDirectory( char *buffer );
+    void   setDicomDirectory( const char *buffer );
     void   setSliceSOPInstanceUID( uint i, char *buffer);
     void   setSliceFilename(uint i, char *buffer);
 
@@ -121,6 +129,12 @@ public:
         voxel_size.x = v_x;
         voxel_size.y = v_y;
         voxel_size.z = v_z;
+    };
+    void   setDataOrigin(float v_x, float v_y, float v_z)
+    {
+        data_origin.x = v_x;
+        data_origin.y = v_y;
+        data_origin.z = v_z;
     };
     void   setRescaleSlope(float v)
     {
@@ -152,6 +166,8 @@ public:
     };
     void   setSliceImagePositionPatient(uint i, float v_x, float v_y, float v_z);
 
+    enum { SOP_RTIMAGE = 0, SOP_CT, SOP_MR };
+    unsigned int sop_type;
 
 protected:
     std::string dicom_dir;
@@ -166,9 +182,11 @@ protected:
     uint image_count;
     SLICE_DATA *slice;
 
-    int3 data_size;
-    float3 voxel_size;
-    float3 data_origin;
+    rtint3 data_size;
+    rtfloat3 voxel_size;
+    rtfloat3 data_origin;
+    rtfloat3 orient_x;
+    rtfloat3 orient_y;
 
     float window_center;
     float window_width;

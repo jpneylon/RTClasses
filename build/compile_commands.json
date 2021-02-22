@@ -1,0 +1,37 @@
+[
+{
+  "directory": "/home/jacko/code/RTClasses/build",
+  "command": "/usr/bin/g++-9      -std=gnu++11 -o CMakeFiles/rtclasses.dir/rtimages.cpp.o -c /home/jacko/code/RTClasses/rtimages.cpp",
+  "file": "/home/jacko/code/RTClasses/rtimages.cpp"
+},
+{
+  "directory": "/home/jacko/code/RTClasses/build",
+  "command": "/usr/bin/g++-9      -std=gnu++11 -o CMakeFiles/rtclasses.dir/rtdose.cpp.o -c /home/jacko/code/RTClasses/rtdose.cpp",
+  "file": "/home/jacko/code/RTClasses/rtdose.cpp"
+},
+{
+  "directory": "/home/jacko/code/RTClasses/build",
+  "command": "/usr/bin/g++-9      -std=gnu++11 -o CMakeFiles/rtclasses.dir/rtplan.cpp.o -c /home/jacko/code/RTClasses/rtplan.cpp",
+  "file": "/home/jacko/code/RTClasses/rtplan.cpp"
+},
+{
+  "directory": "/home/jacko/code/RTClasses/build",
+  "command": "/usr/bin/g++-9      -std=gnu++11 -o CMakeFiles/rtclasses.dir/rtstruct.cpp.o -c /home/jacko/code/RTClasses/rtstruct.cpp",
+  "file": "/home/jacko/code/RTClasses/rtstruct.cpp"
+},
+{
+  "directory": "/home/jacko/code/RTClasses/build",
+  "command": "/usr/bin/g++-9      -std=gnu++11 -o CMakeFiles/rtclasses.dir/rtrigidreg.cpp.o -c /home/jacko/code/RTClasses/rtrigidreg.cpp",
+  "file": "/home/jacko/code/RTClasses/rtrigidreg.cpp"
+},
+{
+  "directory": "/home/jacko/code/RTClasses/build",
+  "command": "/usr/bin/g++-9      -std=gnu++11 -o CMakeFiles/rtclasses.dir/rtdir.cpp.o -c /home/jacko/code/RTClasses/rtdir.cpp",
+  "file": "/home/jacko/code/RTClasses/rtdir.cpp"
+},
+{
+  "directory": "/home/jacko/code/RTClasses/build",
+  "command": "/usr/bin/g++-9      -std=gnu++11 -o CMakeFiles/rtclasses.dir/rtcinemr.cpp.o -c /home/jacko/code/RTClasses/rtcinemr.cpp",
+  "file": "/home/jacko/code/RTClasses/rtcinemr.cpp"
+}
+]

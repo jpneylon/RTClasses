@@ -15,33 +15,27 @@ RTPlan::RTPlan()
     fraction_count = 1;
     beam_count = 1;
     dose_ref_count = 0;
+    rtplan_file_found = false;
 }
-
 RTPlan::~RTPlan()
 {
-    _finalize();
-}
-void
-RTPlan::_finalize()
-{
-    if (beam_data)
-        delete []beam_data;
-
-    if (dose_ref_data)
+    if (rtplan_file_found)
     {
+        delete [] beam_data;
+
         for (uint d=0; d<dose_ref_count; d++)
         {
-            if (dose_ref_data[d].oar_target_switch)
+            if (dose_ref_data[d].oar_target_switch == 1)
                 delete dose_ref_data[d].target;
-            else
+            else if (dose_ref_data[d].oar_target_switch == 0)
                 delete dose_ref_data[d].oar;
         }
-        delete []dose_ref_data;
+        delete [] dose_ref_data;
     }
 }
 
 void
-RTPlan::setDicomDirectory( char *buffer )
+RTPlan::setDicomDirectory( const char *buffer )
 {
     dicom_dir.clear();
     dicom_dir = buffer;
@@ -66,15 +60,14 @@ RTPlan::loadDicomInfo()
         return 0;
     }
 
-    bool rtstruct_file_found = false;
-    while ((dp = readdir(dfd)) != NULL  && !rtstruct_file_found)
+    while ((dp = readdir(dfd)) != NULL  && !rtplan_file_found)
     {
         if ( strcmp(dp->d_name, ".") == 0 || strcmp(dp->d_name, "..") == 0 )
             continue;
-        else //if( strstr(dp->d_name,".dcm") != NULL )
+        else //if (strstr(dp->d_name,".dcm")!=NULL)
         {
-            rtstruct_file_found = importSOPClassUID(dp->d_name);
-            if ( rtstruct_file_found )
+            rtplan_file_found = importSOPClassUID(dp->d_name);
+            if ( rtplan_file_found )
             {
                 dicom_full_filename = dicom_dir.data();
                 dicom_full_filename += "/";
@@ -85,12 +78,12 @@ RTPlan::loadDicomInfo()
     }
     closedir(dfd);
 
-    if ( rtstruct_file_found )
+    if ( rtplan_file_found )
         importPatientInfo();
     else
         printf("\n No RTPLAN file found.");
 
-    return rtstruct_file_found;
+    return rtplan_file_found;
 }
 
 bool
@@ -240,6 +233,8 @@ RTPlan::loadRTPlanData()
 
         if (beam_count == 0)
             beam_count = dcmrt_plan.getBeamSequence().getNumberOfItems();
+        if (beam_count == 0)
+            beam_count = 1;
         printf("\n\n %d Beams.",beam_count);
         beam_data = new BEAM_DATA[beam_count];
         for (uint b=0; b<beam_count; b++)
@@ -275,6 +270,8 @@ RTPlan::loadRTPlanData()
 
         dose_ref_count = dcmrt_plan.getDoseReferenceSequence().getNumberOfItems();
         printf("\n\n %d Dose Reference Items.",dose_ref_count);
+        if (dose_ref_count == 0)
+            dose_ref_count = 1;
         dose_ref_data = new DOSE_REF_DATA[dose_ref_count];
         for (uint d=0; d<dose_ref_count; d++)
         {
@@ -303,15 +300,16 @@ RTPlan::loadRTPlanData()
                 printf("\n     Dose Reference Description - %s",dose_ref_data[d].description.data());
             }
             OFString refTYPE;
+
+            dose_ref_data[d].oar_target_switch = -1;
             if (dcmrt_plan.getDoseReferenceSequence().getItem(d).getDoseReferenceType( refTYPE, 0 ).good() )
             {
                 dose_ref_data[d].type = refTYPE.data();
                 printf("\n     Dose Reference Type - %s",dose_ref_data[d].type.data());
 
-                dose_ref_data[d].oar_target_switch = false;
                 if ( dose_ref_data[d].type.find("TARGET") >= 0 )
                 {
-                    dose_ref_data[d].oar_target_switch = true;
+                    dose_ref_data[d].oar_target_switch = 1;
                     dose_ref_data[d].target = new TARGET_DATA;
 
                     Float64 rxDOSE;
@@ -362,6 +360,7 @@ RTPlan::loadRTPlanData()
                 }
                 else if ( dose_ref_data[d].type.find("ORGAN_AT_RISK") >= 0 )
                 {
+                    dose_ref_data[d].oar_target_switch = 0;
                     dose_ref_data[d].oar = new OAR_DATA;
 
                     Float64 fullVolDOSE;
@@ -393,16 +392,107 @@ RTPlan::loadRTPlanData()
 
 
 
+void
+RTPlan::saveRTPlanData( const char *outpath, bool anonymize_switch )
+{
+    DcmFileFormat format;
+    OFCondition status = format.loadFile( dicom_full_filename.data() );
+    if (status.bad())
+    {
+        printf("\n Error reading DICOM file:\n\t%s\n", dicom_full_filename.data() );
+        return;
+    }
+
+    if (anonymize_switch)
+        anonymize( format.getDataset() );
+
+    time_t rawtime;
+    struct tm * timeinfo;
+    char buffer[64];
+    time (&rawtime);
+    timeinfo = localtime (&rawtime);
+    strftime (buffer,32,"%G%m%d",timeinfo);
+    //format.getDataset()->putAndInsertString(DCM_AcquisitionDate,buffer).good();
+    format.getDataset()->putAndInsertString(DCM_SeriesDate,buffer).good();
+    printf("  Creation date written...\n");
+    fflush(stdout);
+
+    printf("\n %s",outpath);
+    if (0 == mkdir((const char *)outpath,S_IRWXU|S_IRWXG|S_IRWXO) )
+    {
+        printf("\n ...directory created successfully.");
+        fflush(stdout);
+    }
+    else
+    {
+        printf("\n Directory already exists.\n");
+        fflush(stdout);
+    }
+
+    DRTPlanIOD rtplan_template;
+    status = rtplan_template.read(*format.getDataset());
+
+    DRTPlanIOD rtplan_new(rtplan_template);
+
+    format.clear();
+    status = rtplan_new.write(*format.getDataset());
+    if(status.good())
+    {
+        char outfilename[512];
+        sprintf(outfilename,"%s/RP.new_plan.dcm",outpath);
+        status = format.saveFile( outfilename );
+        if (status.bad())
+            printf("Error: cannot write DICOM file ( %s )",status.text() );
+    }
+}
 
 
-
-
-
-
-
-
-
-
-
-
-
+void
+RTPlan::anonymize( DcmDataset *dataset )
+{
+    dataset->findAndDeleteElement(DCM_AccessionNumber, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_ReferringPhysicianName, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_ReferringPhysicianAddress, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_ReferringPhysicianTelephoneNumbers, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_ReferringPhysicianIdentificationSequence, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PhysiciansOfRecord, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_InstitutionName, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_InstitutionAddress, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_InstitutionCodeSequence, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientName, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientID, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_IssuerOfPatientID, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_TypeOfPatientID, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_IssuerOfPatientIDQualifiersSequence, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientBirthDate, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientBirthTime, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientSex, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientInsurancePlanCodeSequence, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientPrimaryLanguageCodeSequence, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientPrimaryLanguageModifierCodeSequence, OFTrue, OFTrue);
+//    dataset->findAndDeleteElement(DCM_OtherPatientIDs, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_OtherPatientNames, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_OtherPatientIDsSequence, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientBirthName, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientAge, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientSize, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientSizeCodeSequence, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientWeight, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientAddress, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientMotherBirthName, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_MilitaryRank, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_BranchOfService, OFTrue, OFTrue);
+//    dataset->findAndDeleteElement(DCM_MedicalRecordLocator, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_MedicalAlerts, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_Allergies, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_CountryOfResidence, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_RegionOfResidence, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientTelephoneNumbers, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_EthnicGroup, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_Occupation, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_SmokingStatus, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_AdditionalPatientHistory, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PregnancyStatus, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_LastMenstrualDate, OFTrue, OFTrue);
+    dataset->findAndDeleteElement(DCM_PatientReligiousPreference, OFTrue, OFTrue);
+}
