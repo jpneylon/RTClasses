@@ -5,7 +5,7 @@ C/C++ Library for reading and writing DICOM RT files
 Install with CMAKE 
  - minimum version 3.0
  - only set up for linux/ubuntu
- - installs headers and libary into system diretories
+ - installs headers and library into system directories
 
 Clone repository ->
 
